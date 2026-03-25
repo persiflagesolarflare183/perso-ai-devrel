@@ -87,9 +87,7 @@ npm run dev
 
 ## 4. 배포된 서비스 URL
 
-> **← 배포 완료 후 아래 줄을 실제 URL로 교체하세요**
-
-**`https://YOUR_VERCEL_URL.vercel.app`**
+**`https://perso-ai-devrel.vercel.app/login`**
 
 GitHub `main` 브랜치에 push하면 Vercel이 자동으로 빌드·배포합니다. Vercel 프로젝트 Settings → Environment Variables에 위 환경 변수 8개를 입력하고, Google Cloud Console에 Vercel 도메인의 리디렉션 URI도 추가해야 합니다.
 
