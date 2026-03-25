@@ -12,7 +12,11 @@
       "Bash(npx tsc:*)",
       "Bash(xargs grep:*)",
       "Bash(ls:*)",
-      "Bash(grep -r \"vercel.app\\\\|VERCEL_URL\\\\|vercel.com\" /c/Users/User/Desktop/pserso-ai-devrel --include=*.json --include=*.ts --include=*.tsx --include=*.md --include=*.env* -l)"
+      "Bash(grep -r \"vercel.app\\\\|VERCEL_URL\\\\|vercel.com\" /c/Users/User/Desktop/pserso-ai-devrel --include=*.json --include=*.ts --include=*.tsx --include=*.md --include=*.env* -l)",
+      "Bash(/c/Users/User/Desktop/pserso-ai-devrel/README.md:*)",
+      "Bash(grep -r \"GOOGLE\\\\|NEXTAUTH\\\\|AUTH\" /c/Users/User/Desktop/pserso-ai-devrel/.env* --include=*)",
+      "Bash(grep -h process.env.w+ /c/Users/User/Desktop/pserso-ai-devrel/lib/*.ts /c/Users/User/Desktop/pserso-ai-devrel/auth.ts)",
+      "Bash(grep -r \"4\\\\.5\\\\|4500\" /c/Users/User/Desktop/pserso-ai-devrel --include=*.ts --include=*.tsx --include=*.md)"
     ]
   }
 }
