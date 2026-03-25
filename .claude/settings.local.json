@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -d /c/Users/User/Desktop/pserso-ai-devrel/*/)",
+      "Bash(grep -v \"^$\")",
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/lib)",
+      "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/app/api/auth/[...nextauth])",
+      "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/app/login)",
+      "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/app/blocked)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
