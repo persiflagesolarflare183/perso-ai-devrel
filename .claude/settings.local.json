@@ -9,7 +9,9 @@
       "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/app/api/auth/[...nextauth])",
       "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/app/login)",
       "Bash(mkdir -p /c/Users/User/Desktop/pserso-ai-devrel/app/blocked)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(ls:*)"
     ]
   }
 }
