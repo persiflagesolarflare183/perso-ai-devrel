@@ -20,13 +20,13 @@ function voiceId(): string {
 
 /**
  * Transcribe an audio buffer using ElevenLabs Scribe (STT).
- * Returns the transcribed text.
+ * Returns the transcribed text and detected language code (e.g. "ko", "en").
  */
 export async function transcribe(
   audioBuffer: Buffer,
   filename: string,
   mimeType: string
-): Promise<string> {
+): Promise<{ text: string; languageCode: string | null }> {
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(audioBuffer)], { type: mimeType }), filename);
   form.append("model_id", "scribe_v1");
@@ -42,8 +42,8 @@ export async function transcribe(
     throw new Error(`ElevenLabs STT error ${res.status}: ${body}`);
   }
 
-  const data = (await res.json()) as { text: string };
-  return data.text;
+  const data = (await res.json()) as { text: string; language_code?: string };
+  return { text: data.text, languageCode: data.language_code ?? null };
 }
 
 /**

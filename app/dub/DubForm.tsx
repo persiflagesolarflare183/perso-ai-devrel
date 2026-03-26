@@ -28,9 +28,16 @@ type Status = "idle" | "loading" | "done" | "error";
 interface DubResult {
   transcript: string;
   translation: string;
+  detectedLanguage: string | null;
   audio: string; // base64
   mimeType: string;
 }
+
+const LANGUAGE_NAMES: Record<string, string> = {
+  ko: "한국어", en: "영어", ja: "일본어", zh: "중국어",
+  es: "스페인어", fr: "프랑스어", de: "독일어",
+  pt: "포르투갈어", it: "이탈리아어", ru: "러시아어",
+};
 
 // ── Client-side media helpers ─────────────────────────────────────────────────
 
@@ -472,9 +479,28 @@ export default function DubForm() {
 
           {/* Transcript */}
           <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-400">
-              원문 전사
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+                원문 전사
+                {result.detectedLanguage && (
+                  <span className="ml-2 normal-case text-gray-400">
+                    ({LANGUAGE_NAMES[result.detectedLanguage] ?? result.detectedLanguage})
+                  </span>
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(new Blob([result.transcript], { type: "text/plain" }));
+                  a.download = "transcript.txt";
+                  a.click();
+                }}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                ↓ txt
+              </button>
+            </div>
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
               {result.transcript}
             </p>
@@ -482,9 +508,23 @@ export default function DubForm() {
 
           {/* Translation */}
           <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-400">
-              번역 — {selectedLabel}
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+                번역 — {selectedLabel}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(new Blob([result.translation], { type: "text/plain" }));
+                  a.download = `translation_${targetLanguage.toLowerCase()}.txt`;
+                  a.click();
+                }}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                ↓ txt
+              </button>
+            </div>
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
               {result.translation}
             </p>

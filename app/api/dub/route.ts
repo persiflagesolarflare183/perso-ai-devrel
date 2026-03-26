@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
 
     // 2. Transcribe with ElevenLabs Scribe
-    const transcript = await transcribe(
+    const { text: transcript, languageCode } = await transcribe(
       audioBuffer,
       audioFile.name || "audio.mp3",
       audioFile.type || "audio/mpeg"
@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       transcript,
       translation,
+      detectedLanguage: languageCode,
       audio: ttsBuffer.toString("base64"),
       mimeType: "audio/mpeg",
     });
