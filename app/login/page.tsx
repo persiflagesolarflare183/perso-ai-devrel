@@ -2,14 +2,14 @@ import { signIn } from "@/auth";
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-violet-700 via-blue-600 to-indigo-800 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md p-8 flex flex-col gap-7">
+    <main className="min-h-screen bg-gradient-to-b from-blue-50/50 via-white to-slate-50 flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-8 shadow flex flex-col gap-7">
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/20 text-white text-xs font-bold">D</span>
-            <h1 className="text-xl font-bold text-white">AI Dubbing</h1>
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white text-xs font-bold">D</span>
+            <h1 className="text-xl font-bold text-gray-900">AI Dubbing</h1>
           </div>
-          <p className="text-sm text-white/70">
+          <p className="text-sm text-gray-500">
             오디오·영상을 업로드하면 원하는 언어로 더빙해드립니다.
           </p>
           <ul className="flex flex-col gap-1.5 mt-1">
@@ -18,8 +18,8 @@ export default function LoginPage() {
               "DeepL로 10개 언어 번역",
               "ElevenLabs TTS로 음성 합성",
             ].map((item) => (
-              <li key={item} className="flex items-center gap-2 text-xs text-white/50">
-                <span className="h-1 w-1 rounded-full bg-violet-300 shrink-0" />
+              <li key={item} className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="h-1 w-1 rounded-full bg-blue-400 shrink-0" />
                 {item}
               </li>
             ))}
@@ -34,7 +34,7 @@ export default function LoginPage() {
         >
           <button
             type="submit"
-            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-white/20 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-white/90 active:bg-white/80 transition-colors"
+            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
           >
             {/* Google "G" logo */}
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4 shrink-0">
