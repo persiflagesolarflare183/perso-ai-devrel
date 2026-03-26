@@ -172,6 +172,10 @@ export default function DubForm() {
   const selectFile = async (selected: File | null) => {
     setFile(selected);
     setFileDuration(null);
+    setResult(null);
+    setError(null);
+    setStatus("idle");
+    setAudioUrl(null);
     if (!selected) return;
 
     const url = URL.createObjectURL(selected);
@@ -580,6 +584,15 @@ export default function DubForm() {
               ↓ MP3 다운로드
             </button>
           </div>
+
+          {/* Reset */}
+          <button
+            type="button"
+            onClick={() => selectFile(null)}
+            className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600"
+          >
+            다시 더빙하기
+          </button>
         </div>
       )}
     </form>
