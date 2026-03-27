@@ -346,155 +346,183 @@ export default function DubForm() {
       : null;
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
 
-      {/* ── File upload card ─────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow">
-        <p className="text-sm font-semibold text-gray-800 mb-0.5">파일 선택</p>
-        <p className="text-xs text-gray-400 mb-3">
-          MP3 · WAV · M4A · FLAC · OGG &nbsp;|&nbsp; MP4 · WebM &nbsp;·&nbsp; 60초 초과 시 앞 60초만 처리
-        </p>
-
-        {/* Drop zone */}
-        <label
-          className={`flex flex-col items-center gap-2 w-full cursor-pointer rounded-xl border-2 border-dashed py-8 px-4 text-center transition-all duration-150 ${
-            isDragging
-              ? "border-blue-400 bg-blue-50 scale-[1.01]"
-              : "border-gray-200 bg-gray-50/60 hover:border-blue-300 hover:bg-blue-50/30"
-          }`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <svg
-            className={`w-7 h-7 transition-colors ${isDragging ? "text-blue-400" : "text-gray-300"}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-            />
-          </svg>
-          <span className={`text-sm font-medium transition-colors ${isDragging ? "text-blue-500" : "text-gray-500"}`}>
-            {isDragging ? "여기에 놓으세요" : file ? file.name : "파일 선택 또는 드래그 앤 드롭"}
+      {/* ── Step 1: File upload ──────────────────────────────────────────────── */}
+      <div className="bg-white border border-[#e4e3df] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.06)]">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-7 h-7 rounded-lg bg-[rgba(37,99,235,0.1)] text-blue-600 text-[13px] font-bold flex items-center justify-center flex-shrink-0">
+            01
           </span>
-          {!file && !isDragging && (
-            <span className="text-xs text-gray-400">
-              audio/* · video/mp4 · video/webm
-            </span>
-          )}
-          <input
-            type="file"
-            accept="audio/*,video/mp4,video/webm,video/quicktime"
-            onChange={handleFileChange}
-            className="sr-only"
-          />
-        </label>
+          <div>
+            <p className="text-sm font-semibold text-[#1a1917]">파일 선택</p>
+            <p className="text-xs text-[#a8a29e]">오디오 또는 영상 파일을 업로드하세요</p>
+          </div>
+        </div>
 
-        {/* File metadata + warnings */}
-        {file && (
-          <div className="mt-3 flex flex-col gap-1">
-            <p className="text-xs text-gray-400">
-              {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
-              {durationLabel && ` · ${durationLabel}`}
-              {isVideoFile && " · 영상"}
-            </p>
-            {isVideoFile && !willCrop && (
-              <p className="text-xs text-gray-400">
-                영상에서 오디오 트랙만 추출하여 전송됩니다.
+        {!file ? (
+          <label
+            className={`flex flex-col items-center gap-3 w-full cursor-pointer rounded-xl border-[1.5px] border-dashed py-8 px-4 text-center transition-all duration-150 ${
+              isDragging
+                ? "border-blue-400 bg-[rgba(37,99,235,0.06)]"
+                : "border-[#d0cfc9] hover:border-blue-500 hover:bg-[rgba(37,99,235,0.04)]"
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div className={`w-11 h-11 rounded-xl border flex items-center justify-center text-xl transition-all ${
+              isDragging ? "bg-[rgba(37,99,235,0.07)] border-[rgba(37,99,235,0.25)]" : "bg-[#f5f4f0] border-[#e4e3df]"
+            }`}>
+              🎵
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[#1a1917] mb-0.5">
+                {isDragging ? "여기에 놓으세요" : (
+                  <><span className="text-blue-600">파일 선택</span> 또는 드래그 앤 드롭</>
+                )}
               </p>
-            )}
-            {willCrop && (
-              <p className="text-xs font-medium text-amber-600">
-                {isVideoFile
-                  ? "영상이 1분을 초과하여 앞 60초의 오디오만 처리합니다."
-                  : "파일이 1분을 초과하여 앞 60초만 처리합니다."}
+              <p className="text-xs text-[#a8a29e]">60초 초과 시 앞 60초만 처리됩니다</p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {["MP3", "WAV", "M4A", "FLAC", "OGG", "MP4", "WebM"].map((f) => (
+                <span key={f} className="bg-[#f5f4f0] border border-[#e4e3df] rounded-md px-2 py-0.5 text-[11px] font-medium text-[#a8a29e] tracking-wide">
+                  {f}
+                </span>
+              ))}
+            </div>
+            <input
+              type="file"
+              accept="audio/*,video/mp4,video/webm,video/quicktime"
+              onChange={handleFileChange}
+              className="sr-only"
+            />
+          </label>
+        ) : (
+          <div className="flex items-center gap-3 bg-[rgba(37,99,235,0.06)] border border-[rgba(37,99,235,0.2)] rounded-xl px-4 py-3.5">
+            <span className="text-2xl">{isVideoFile ? "🎬" : "🎵"}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#1a1917] truncate">{file.name}</p>
+              <p className="text-xs text-[#a8a29e]">
+                {(file.size / 1024 / 1024).toFixed(1)} MB
+                {durationLabel && ` · ${durationLabel}`}
+                {isVideoFile && " · 영상"}
               </p>
-            )}
+            </div>
+            <button
+              type="button"
+              onClick={() => selectFile(null)}
+              className="text-[#a8a29e] hover:text-[#1a1917] hover:bg-black/5 rounded-lg p-1.5 transition-colors text-xl leading-none"
+            >
+              ×
+            </button>
           </div>
         )}
-      </section>
 
-      {/* ── Language selector card ───────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow">
-        <p className="text-sm font-semibold text-gray-800 mb-0.5">목표 언어</p>
-        <p className="text-xs text-gray-400 mb-3">
-          원본 음성을 전사·번역·합성하여 선택한 언어로 더빙합니다.
-        </p>
-        <select
-          value={targetLanguage}
-          onChange={(e) => setTargetLanguage(e.target.value)}
-          className="w-full max-w-xs rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-        >
-          {SUPPORTED_LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.label}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      {/* ── Submit ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-2">
-        <button
-          type="submit"
-          disabled={!file || status === "loading"}
-          className="w-full rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {status === "loading" ? "처리 중…" : "더빙 생성"}
-        </button>
-        {status !== "loading" && (
-          <p className="text-center text-xs text-gray-400">
-            보통 15~45초 정도 소요될 수 있어요.
-          </p>
+        {willCrop && (
+          <div className="flex items-start gap-2 mt-3 bg-[#fff7ed] border border-[#fed7aa] rounded-xl px-3.5 py-2.5 text-sm text-[#92400e] leading-relaxed">
+            <span className="text-base flex-shrink-0 mt-0.5">⚠️</span>
+            <span>
+              {isVideoFile
+                ? "영상이 1분을 초과하여 앞 60초의 오디오만 처리합니다."
+                : "파일이 1분을 초과하여 앞 60초만 처리합니다."}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* ── Loading — step chips + spinner ───────────────────────────────────── */}
-      {status === "loading" && (
-        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50/40 px-5 py-4">
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-500" />
-            <p className="text-sm font-semibold text-blue-700">
-              {step === 0 && "파일 확인 중…"}
-              {step === 1 &&
-                (isVideoFile
-                  ? "영상에서 오디오 추출 중…"
-                  : "음원 전처리 중 (앞 60초 추출)…")}
-              {step === 2 && "서버 처리 중…"}
-            </p>
+      {/* ── Step 2: Language ─────────────────────────────────────────────────── */}
+      <div className="bg-white border border-[#e4e3df] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.06)]">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-7 h-7 rounded-lg bg-[rgba(37,99,235,0.1)] text-blue-600 text-[13px] font-bold flex items-center justify-center flex-shrink-0">
+            02
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-[#1a1917]">목표 언어</p>
+            <p className="text-xs text-[#a8a29e]">원본 언어는 자동으로 감지됩니다</p>
           </div>
-          {step === 2 && (
-            <>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full bg-white/70 border border-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                  음성 전사
-                </span>
-                <span className="text-xs text-blue-300">→</span>
-                <span className="rounded-full bg-white/70 border border-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                  {selectedLabel} 번역
-                </span>
-                <span className="text-xs text-blue-300">→</span>
-                <span className="rounded-full bg-white/70 border border-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                  음성 합성
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-blue-400">
-                오디오 길이에 따라 15~45초 소요됩니다.
+        </div>
+
+        <div className="grid grid-cols-[1fr_40px_1fr] items-end gap-2">
+          <div>
+            <label className="block text-[11px] font-medium text-[#a8a29e] uppercase tracking-widest mb-1.5">
+              원본
+            </label>
+            <div className="w-full border border-[#e4e3df] rounded-xl px-3 py-2.5 text-sm font-medium text-[#a8a29e] bg-[#f5f4f0] select-none">
+              자동 감지
+            </div>
+          </div>
+          <div className="flex items-center justify-center h-[42px] text-[#a8a29e] text-base">
+            →
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-[#a8a29e] uppercase tracking-widest mb-1.5">
+              목표
+            </label>
+            <select
+              value={targetLanguage}
+              onChange={(e) => setTargetLanguage(e.target.value)}
+              className="w-full border-[1.5px] border-[#e4e3df] rounded-xl px-3 py-2.5 text-sm font-medium text-[#1a1917] bg-[#f5f4f0] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none cursor-pointer transition-all appearance-none"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Generate button ───────────────────────────────────────────────────── */}
+      <button
+        type="submit"
+        disabled={!file || status === "loading"}
+        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-[#93c5fd] text-white rounded-2xl px-6 py-4 text-[15px] font-semibold transition-all hover:-translate-y-px hover:shadow-[0_6px_20px_rgba(37,99,235,0.28)] active:translate-y-0 disabled:cursor-not-allowed"
+      >
+        {status === "loading" ? (
+          <>
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            처리 중…
+          </>
+        ) : (
+          "더빙 생성"
+        )}
+      </button>
+      {status !== "loading" && (
+        <p className="text-center text-xs text-[#a8a29e]">보통 15~45초 정도 소요됩니다</p>
+      )}
+
+      {/* ── Loading card ──────────────────────────────────────────────────────── */}
+      {status === "loading" && (
+        <div className="bg-white border border-[#e4e3df] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.06)]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 rounded-full border-[3px] border-[#e4e3df] border-t-blue-600 animate-spin" />
+            <div className="flex flex-col items-center gap-1 text-center">
+              <p className="text-sm font-semibold text-[#1a1917]">
+                {step === 0 && "파일 확인 중…"}
+                {step === 1 && (isVideoFile ? "영상에서 오디오 추출 중…" : "음원 전처리 중…")}
+                {step === 2 && "서버에서 처리 중…"}
               </p>
-            </>
-          )}
+              {step === 2 && (
+                <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1">
+                  <span className="text-xs font-medium text-blue-500">음성 전사</span>
+                  <span className="text-xs text-[#a8a29e]">→</span>
+                  <span className="text-xs font-medium text-blue-500">{selectedLabel} 번역</span>
+                  <span className="text-xs text-[#a8a29e]">→</span>
+                  <span className="text-xs font-medium text-blue-500">음성 합성</span>
+                </div>
+              )}
+              <p className="text-xs text-[#a8a29e] mt-0.5">오디오 길이에 따라 15~45초 소요됩니다</p>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ── Error ────────────────────────────────────────────────────────────── */}
+      {/* ── Error ─────────────────────────────────────────────────────────────── */}
       {status === "error" && error && (
-        <div className="rounded-2xl border border-red-100 bg-red-50/80 px-5 py-4">
-          <p className="mb-1 text-sm font-semibold text-red-700">오류가 발생했습니다</p>
+        <div className="bg-white border border-red-100 rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <p className="text-sm font-semibold text-red-700 mb-1">오류가 발생했습니다</p>
           <p className="whitespace-pre-wrap text-sm text-red-600">{error}</p>
           <p className="mt-2.5 text-xs text-red-400">
             다른 파일 형식으로 시도하거나, 더 짧은 오디오 파일을 업로드해 보세요.
@@ -502,98 +530,107 @@ export default function DubForm() {
         </div>
       )}
 
-      {/* ── Results ──────────────────────────────────────────────────────────── */}
+      {/* ── Results ───────────────────────────────────────────────────────────── */}
       {status === "done" && result && (
-        <div className="flex flex-col gap-3 pt-1">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100">
-              <svg className="w-3 h-3 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
+        <div className="bg-white border border-[#e4e3df] rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.06)]">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="w-7 h-7 rounded-full bg-[#dcfce7] text-green-600 flex items-center justify-center text-sm flex-shrink-0">
+              ✓
             </span>
-            <span className="text-xs font-semibold text-green-700">더빙 완료</span>
+            <div>
+              <p className="text-sm font-semibold text-[#1a1917]">더빙 완료</p>
+              <p className="text-xs text-[#a8a29e]">{selectedLabel}로 더빙되었습니다</p>
+            </div>
           </div>
 
-          {/* Transcript */}
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                원문 전사
-                {result.detectedLanguage && (
-                  <span className="ml-2 normal-case font-medium text-blue-400">
-                    {LANGUAGE_NAMES[result.detectedLanguage] ?? result.detectedLanguage}
-                  </span>
-                )}
+          <div className="flex flex-col gap-4">
+            {/* Transcript */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a8a29e]">
+                  원문 전사
+                  {result.detectedLanguage && (
+                    <span className="ml-2 normal-case text-blue-400">
+                      {LANGUAGE_NAMES[result.detectedLanguage] ?? result.detectedLanguage}
+                    </span>
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(new Blob([result.transcript], { type: "text/plain" }));
+                    a.download = "transcript.txt";
+                    a.click();
+                  }}
+                  className="text-xs text-[#a8a29e] hover:text-blue-500 transition-colors"
+                >
+                  ↓ txt
+                </button>
+              </div>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#57534e] bg-[#f5f4f0] rounded-xl px-4 py-3">
+                {result.transcript}
               </p>
+            </div>
+
+            <div className="h-px bg-[#e4e3df]" />
+
+            {/* Translation */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a8a29e]">
+                  번역 — {selectedLabel}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(new Blob([result.translation], { type: "text/plain" }));
+                    a.download = `translation_${targetLanguage.toLowerCase()}.txt`;
+                    a.click();
+                  }}
+                  className="text-xs text-[#a8a29e] hover:text-blue-500 transition-colors"
+                >
+                  ↓ txt
+                </button>
+              </div>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#57534e] bg-[#f5f4f0] rounded-xl px-4 py-3">
+                {result.translation}
+              </p>
+            </div>
+
+            <div className="h-px bg-[#e4e3df]" />
+
+            {/* Audio */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a8a29e] mb-2.5">
+                더빙 오디오
+              </p>
+              {audioUrl && (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <audio controls src={audioUrl} className="w-full mb-3" />
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = URL.createObjectURL(new Blob([result.transcript], { type: "text/plain" }));
-                  a.download = "transcript.txt";
-                  a.click();
-                }}
-                className="text-xs text-gray-300 hover:text-blue-400 transition-colors"
+                onClick={handleDownload}
+                className="w-full flex items-center justify-center gap-2 bg-[#f5f4f0] border-[1.5px] border-[#d0cfc9] rounded-xl px-4 py-3 text-sm font-medium text-[#1a1917] hover:border-blue-500 hover:bg-[rgba(37,99,235,0.04)] hover:text-blue-600 transition-all"
               >
-                ↓ txt
+                ↓ MP3 다운로드
               </button>
             </div>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-              {result.transcript}
-            </p>
           </div>
-
-          {/* Translation */}
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                번역 — {selectedLabel}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = URL.createObjectURL(new Blob([result.translation], { type: "text/plain" }));
-                  a.download = `translation_${targetLanguage.toLowerCase()}.txt`;
-                  a.click();
-                }}
-                className="text-xs text-gray-300 hover:text-blue-400 transition-colors"
-              >
-                ↓ txt
-              </button>
-            </div>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-              {result.translation}
-            </p>
-          </div>
-
-          {/* Audio output */}
-          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-              더빙 오디오
-            </p>
-            {audioUrl && (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
-              <audio controls src={audioUrl} className="w-full mb-3" />
-            )}
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 active:bg-gray-200"
-            >
-              ↓ MP3 다운로드
-            </button>
-          </div>
-
-          {/* Reset */}
-          <button
-            type="button"
-            onClick={() => selectFile(null)}
-            className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600"
-          >
-            다시 더빙하기
-          </button>
         </div>
+      )}
+
+      {/* Reset */}
+      {status === "done" && (
+        <button
+          type="button"
+          onClick={() => selectFile(null)}
+          className="w-full rounded-xl border border-[#e4e3df] py-2.5 text-sm font-medium text-[#a8a29e] hover:border-[#d0cfc9] hover:text-[#57534e] transition-colors"
+        >
+          다시 더빙하기
+        </button>
       )}
     </form>
   );
