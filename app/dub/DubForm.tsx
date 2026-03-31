@@ -195,15 +195,55 @@ function buildSubtitleChunks(text: string): string[] {
 }
 
 /**
+ * video.captureStream() 또는 canvas.captureStream() 으로 영상 스트림을 얻는다.
+ *
+ * - video.captureStream: Chrome/Edge/Firefox ✅
+ * - canvas.captureStream: iOS Safari 11+ ✅ (video.captureStream 미지원 폴백)
+ *   → canvas에 requestAnimationFrame 으로 프레임을 그려서 스트림 생성
+ *
+ * 반환값: { stream, cleanup } 또는 null(두 방법 모두 미지원)
+ */
+function getCaptureStream(
+  video: HTMLVideoElement,
+): { stream: MediaStream; cleanup: () => void } | null {
+  // 방법 1: video.captureStream (Chrome/Edge/Firefox)
+  if ("captureStream" in video) {
+    const stream = (video as unknown as { captureStream: () => MediaStream }).captureStream();
+    return { stream, cleanup: () => {} };
+  }
+
+  // 방법 2: canvas.captureStream (iOS Safari 11+)
+  const canvas = document.createElement("canvas");
+  if (!("captureStream" in canvas)) return null;
+
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  let rafId = 0;
+  const draw = () => {
+    if (video.readyState >= 2) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    rafId = requestAnimationFrame(draw);
+  };
+  rafId = requestAnimationFrame(draw);
+
+  const stream = (canvas as unknown as { captureStream: (fps: number) => MediaStream }).captureStream(30);
+  return { stream, cleanup: () => cancelAnimationFrame(rafId) };
+}
+
+/**
  * MediaRecorder로 영상의 [startSec, endSec] 구간을 실시간 녹화하여
  * 진짜 크롭된 영상 Blob을 반환한다.
- * captureStream 미지원 브라우저(iOS Safari 등)는 Error("CAPTURE_STREAM_UNSUPPORTED") 를 throw 한다.
+ * video.captureStream 미지원 시 canvas.captureStream 으로 자동 폴백(iOS Safari 대응).
  * 녹화 속도 = 실시간 (60초 구간 → 약 60초 소요).
  */
 function cropVideoBlob(file: File, startSec: number, endSec: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const testEl = document.createElement("video");
-    if (!("captureStream" in testEl)) {
+    // 지원 여부 사전 체크 (video 또는 canvas 중 하나라도 captureStream 있으면 진행)
+    const testVideo = document.createElement("video");
+    const testCanvas = document.createElement("canvas");
+    if (!("captureStream" in testVideo) && !("captureStream" in testCanvas)) {
       reject(new Error("CAPTURE_STREAM_UNSUPPORTED"));
       return;
     }
@@ -224,13 +264,19 @@ function cropVideoBlob(file: File, startSec: number, endSec: number): Promise<Bl
           video.addEventListener("seeked", onSeeked);
         });
 
-        const stream = (video as unknown as { captureStream: () => MediaStream }).captureStream();
+        const captured = getCaptureStream(video);
+        if (!captured) { cleanup(); reject(new Error("CAPTURE_STREAM_FAILED")); return; }
+
         const mimeType = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm";
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const recorder = new MediaRecorder(captured.stream, { mimeType });
         const chunks: Blob[] = [];
 
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => { cleanup(); resolve(new Blob(chunks, { type: mimeType })); };
+        recorder.onstop = () => {
+          captured.cleanup();
+          cleanup();
+          resolve(new Blob(chunks, { type: mimeType }));
+        };
 
         recorder.start(250);
         await video.play();
@@ -674,9 +720,10 @@ export default function DubForm() {
   const handleVideoDownload = async () => {
     if (!originalUrl || !audioUrl) return;
 
-    const testEl = document.createElement("video");
-    if (!("captureStream" in testEl)) {
-      // iOS Safari 등 captureStream 미지원 → MP3로 폴백하며 사용자에게 안내
+    // video 또는 canvas captureStream 중 하나라도 지원해야 영상 다운로드 가능
+    const testVideo = document.createElement("video");
+    const testCanvas = document.createElement("canvas");
+    if (!("captureStream" in testVideo) && !("captureStream" in testCanvas)) {
       setVideoDownloadNotice(
         "이 브라우저는 영상 합성을 지원하지 않아 더빙 MP3만 다운로드됩니다.\n" +
         "영상 파일로 받으려면 Chrome 또는 Edge를 사용해 주세요."
@@ -702,17 +749,20 @@ export default function DubForm() {
         new Promise<void>((r) => { audio.oncanplay = () => r(); audio.load(); }),
       ]);
 
-      video.currentTime = cropStart;
+      // videoCropped=true 이면 originalUrl 이 이미 크롭된 영상(0초 시작)이므로 0으로 seek
+      video.currentTime = videoCropped ? 0 : cropStart;
       audio.currentTime = 0;
 
-      const videoStream = (video as unknown as { captureStream: () => MediaStream }).captureStream();
+      const captured = getCaptureStream(video);
+      if (!captured) throw new Error("captureStream unavailable");
+
       const audioCtx = new AudioContext();
       const audioSrc = audioCtx.createMediaElementSource(audio);
       const audioDest = audioCtx.createMediaStreamDestination();
       audioSrc.connect(audioDest);
 
       const combined = new MediaStream([
-        ...videoStream.getVideoTracks(),
+        ...captured.stream.getVideoTracks(),
         ...audioDest.stream.getAudioTracks(),
       ]);
 
@@ -725,6 +775,7 @@ export default function DubForm() {
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = async () => {
+        captured.cleanup(); // canvas RAF 루프 중단
         await audioCtx.close();
         const ext = mimeType === "video/mp4" ? "mp4" : "webm";
         const blob = new Blob(chunks, { type: mimeType });

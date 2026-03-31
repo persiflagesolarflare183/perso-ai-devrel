@@ -19,8 +19,15 @@ const rateLimitMap = new Map<string, RateEntry>();
 
 function isRateLimited(userId: string): boolean {
   const now = Date.now();
-  const entry = rateLimitMap.get(userId);
 
+  // 만료된 항목 정리 (맵 무한 성장 방지)
+  if (rateLimitMap.size > 500) {
+    for (const [key, val] of rateLimitMap) {
+      if (now > val.resetAt) rateLimitMap.delete(key);
+    }
+  }
+
+  const entry = rateLimitMap.get(userId);
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
     return false;
