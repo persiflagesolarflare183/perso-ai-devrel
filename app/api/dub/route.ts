@@ -147,7 +147,7 @@ export async function POST(request: Request) {
 
     // 3. 단어를 발화 세그먼트로 그룹화
     // 타임스탬프가 없거나 "word" 타입 토큰이 전혀 없으면 단일 세그먼트로 처리
-    const grouped = words.length > 0 ? groupWords(words) : [];
+    const grouped = words.length > 0 ? groupWords(words, 0.8) : [];
     const rawSegments =
       grouped.length > 0
         ? grouped

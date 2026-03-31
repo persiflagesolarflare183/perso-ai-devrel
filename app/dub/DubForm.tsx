@@ -146,15 +146,17 @@ async function extractAndCropAudio(
 /**
  * 세그먼트별 더빙 오디오를 타임스탬프에 맞춰 조립하여 WAV Blob 반환.
  *
- * - 각 세그먼트는 원본 발화 시작 시각(seg.start)에 배치
- * - TTS 길이 > 발화 슬롯이면 최대 1.8배까지 빠르게 재생하여 슬롯에 맞춤
- * - totalDuration 으로 정확히 크롭 구간 길이의 오디오 생성
+ * - 각 세그먼트는 원본 발화 시작 시각(seg.start)에 1배속으로 배치
+ * - TTS가 다음 세그먼트 시작 전까지만 재생 (배속 없음, 초과분은 페이드아웃으로 잘라냄)
+ * - 40ms 페이드 인/아웃으로 경계 클릭 노이즈 제거
+ * - 44100Hz 스테레오로 음질 개선
  */
 async function assembleTimedAudio(
   segments: DubSegment[],
   totalDuration: number,
 ): Promise<Blob> {
-  const SR = 22050;
+  const SR = 44100;
+  const FADE = 0.04; // 40ms 페이드
   const offCtx = new OfflineAudioContext(2, Math.ceil(SR * totalDuration), SR);
 
   const audioCtx = new AudioContext();
@@ -172,18 +174,25 @@ async function assembleTimedAudio(
     for (let i = 0; i < decoded.length; i++) {
       const { seg, buffer } = decoded[i];
       const nextStart = i + 1 < segments.length ? segments[i + 1].start : totalDuration;
-      const slot = Math.max(0.05, nextStart - seg.start);
-      // TTS가 슬롯보다 길면 빠르게 재생, 최대 1.8배 (이해 가능한 속도 한계)
-      const speed = Math.min(1.8, Math.max(1.0, buffer.duration / slot));
+      // 배속 없이 1x 재생 — 다음 세그먼트 시작 전까지만 허용
+      const playDuration = Math.min(buffer.duration, Math.max(0.1, nextStart - seg.start));
+      const when = Math.max(0, Math.min(seg.start, totalDuration - 0.001));
+      const fadeDur = Math.min(FADE, playDuration / 4);
 
       const source = offCtx.createBufferSource();
       source.buffer = buffer;
-      source.playbackRate.value = speed;
-      source.connect(offCtx.destination);
 
-      const when = Math.max(0, Math.min(seg.start, totalDuration - 0.001));
-      // duration 파라미터는 출력 타임라인 기준 재생 시간 (playbackRate 이미 반영됨)
-      source.start(when, 0, Math.min(buffer.duration / speed, slot));
+      const gain = offCtx.createGain();
+      // 페이드 인
+      gain.gain.setValueAtTime(0, when);
+      gain.gain.linearRampToValueAtTime(1, when + fadeDur);
+      // 페이드 아웃
+      gain.gain.setValueAtTime(1, when + playDuration - fadeDur);
+      gain.gain.linearRampToValueAtTime(0, when + playDuration);
+
+      source.connect(gain);
+      gain.connect(offCtx.destination);
+      source.start(when, 0, playDuration);
     }
 
     const rendered = await offCtx.startRendering();
@@ -272,9 +281,10 @@ function drawSubtitle(
   const totalTextH = lines.length * lineHeight;
   const bgY = height - pad * 2;
 
-  const maxW = lines.reduce(
-    (m, l) => Math.max(m, ctx.measureText(l).width),
-    0,
+  const maxAllowed = width - pad * 6;
+  const maxW = Math.min(
+    maxAllowed,
+    lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0),
   );
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.beginPath();
@@ -289,7 +299,7 @@ function drawSubtitle(
 
   ctx.fillStyle = "#ffffff";
   lines.forEach((line, i) => {
-    ctx.fillText(line, width / 2, bgY - (lines.length - 1 - i) * lineHeight);
+    ctx.fillText(line, width / 2, bgY - (lines.length - 1 - i) * lineHeight, maxAllowed);
   });
 }
 
@@ -852,6 +862,7 @@ export default function DubForm() {
 
       const audio = document.createElement("audio");
       audio.src = audioUrl;
+      audio.muted = true;
 
       await Promise.all([
         new Promise<void>((r) => { video.oncanplay = () => r(); video.load(); }),
