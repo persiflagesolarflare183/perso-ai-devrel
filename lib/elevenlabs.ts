@@ -39,6 +39,8 @@ export async function transcribe(
 
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 429) throw new Error("ELEVENLABS_QUOTA");
+    if (res.status === 401) throw new Error("ELEVENLABS_AUTH");
     throw new Error(`ElevenLabs STT error ${res.status}: ${body}`);
   }
 
@@ -67,12 +69,9 @@ export async function textToSpeech(text: string): Promise<Buffer> {
 
   if (!res.ok) {
     const body = await res.text();
-    if (res.status === 402) {
-      throw new Error(
-        "The selected ElevenLabs voice is not available on your current plan (402 paid_plan_required). " +
-          "Go to elevenlabs.io/app/voice-lab, open a voice you own or cloned, and copy its Voice ID into ELEVENLABS_VOICE_ID."
-      );
-    }
+    if (res.status === 429) throw new Error("ELEVENLABS_QUOTA");
+    if (res.status === 401) throw new Error("ELEVENLABS_AUTH");
+    if (res.status === 402) throw new Error("ELEVENLABS_PLAN");
     throw new Error(`ElevenLabs TTS error ${res.status}: ${body}`);
   }
 

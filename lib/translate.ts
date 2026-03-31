@@ -24,6 +24,9 @@ export async function translate(text: string, targetLang: LanguageCode): Promise
 
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 456) throw new Error("DEEPL_QUOTA");
+    if (res.status === 429) throw new Error("DEEPL_RATE_LIMIT");
+    if (res.status === 403) throw new Error("DEEPL_AUTH");
     throw new Error(`DeepL error ${res.status}: ${body}`);
   }
 
