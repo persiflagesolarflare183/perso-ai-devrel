@@ -278,6 +278,11 @@ function attachDubSync(
     video.addEventListener("loadedmetadata", onLoaded);
   }
 
+  // 네이티브 컨트롤로 음소거를 해제해도 항상 강제 음소거 유지
+  // (해제하면 원본 오디오 트랙이 들리므로 반드시 막아야 함)
+  video.muted = true;
+  const onVolumeChange = () => { if (!video.muted) video.muted = true; };
+
   // video.currentTime 기준으로 더빙 오디오 오프셋 계산
   const onPlay = () => {
     audio.currentTime = Math.max(0, video.currentTime - start);
@@ -296,12 +301,14 @@ function attachDubSync(
     }
   };
 
+  video.addEventListener("volumechange", onVolumeChange);
   video.addEventListener("play", onPlay);
   video.addEventListener("pause", onPause);
   video.addEventListener("seeked", onSeeked);
   video.addEventListener("timeupdate", onTimeUpdate);
 
   return () => {
+    video.removeEventListener("volumechange", onVolumeChange);
     video.removeEventListener("loadedmetadata", onLoaded);
     video.removeEventListener("play", onPlay);
     video.removeEventListener("pause", onPause);
@@ -583,6 +590,27 @@ export default function DubForm() {
       }
     }
 
+    // ── 영상 크롭을 API 호출과 동시에 시작 ──────────────────────────────
+    // 병렬 실행하면 총 대기 시간 = max(API 시간, 크롭 시간).
+    // API 완료 후 크롭을 시작하던 기존 방식 대비 최대 60초 절약.
+    const abortCtrl = cropAbortRef.current;
+    const snapStart = cropStart;
+    const snapEnd = cropEnd;
+    let cropPromise: Promise<Blob | null> = Promise.resolve(null);
+
+    if (isVideo && (cropStart > 0 || cropEnd < (fileDuration ?? Infinity))) {
+      const testEl = document.createElement("video");
+      if ("captureStream" in testEl) {
+        setIsCroppingVideo(true);
+        cropPromise = cropVideoBlob(file, snapStart, snapEnd).catch((e) => {
+          if ((e as Error).message !== "CAPTURE_STREAM_UNSUPPORTED") {
+            console.warn("[cropVideo] fallback to fragment:", e);
+          }
+          return null;
+        });
+      }
+    }
+
     setStep(2);
 
     const form = new FormData();
@@ -604,33 +632,25 @@ export default function DubForm() {
       setStatus("done");
       setStep(-1);
 
-      // ── 백그라운드 영상 크롭 ─────────────────────────────────────────────
-      // API 결과는 즉시 표시하고, 영상만 별도로 실시간 크롭해 교체한다.
-      // captureStream 미지원(iOS Safari 등)이면 조용히 건너뛴다.
-      if (isVideo && (cropStart > 0 || cropEnd < (fileDuration ?? Infinity))) {
-        const abortCtrl = cropAbortRef.current;
-        const snapStart = cropStart;
-        const snapEnd = cropEnd;
-        setIsCroppingVideo(true);
-        cropVideoBlob(file, snapStart, snapEnd)
-          .then((blob) => {
-            if (abortCtrl.cancelled) return;
-            const newUrl = URL.createObjectURL(blob);
-            if (origUrlRef.current) URL.revokeObjectURL(origUrlRef.current);
-            origUrlRef.current = newUrl;
-            setOriginalUrl(newUrl);
-            setVideoCropped(true);
-          })
-          .catch((e) => {
-            if ((e as Error).message !== "CAPTURE_STREAM_UNSUPPORTED") {
-              console.warn("[cropVideo] fallback to fragment:", e);
-            }
-          })
-          .finally(() => {
-            if (!abortCtrl.cancelled) setIsCroppingVideo(false);
-          });
+      // API가 먼저 끝난 경우 크롭 완료까지 대기
+      const croppedBlob = await cropPromise;
+      if (!abortCtrl.cancelled) {
+        if (croppedBlob) {
+          const newUrl = URL.createObjectURL(croppedBlob);
+          if (origUrlRef.current) URL.revokeObjectURL(origUrlRef.current);
+          origUrlRef.current = newUrl;
+          setOriginalUrl(newUrl);
+          setVideoCropped(true);
+        }
+        setIsCroppingVideo(false);
       }
     } catch (err) {
+      // API 에러 시에도 크롭 프로미스는 정리
+      cropPromise.then((blob) => {
+        if (blob) URL.revokeObjectURL(URL.createObjectURL(blob));
+      }).catch(() => {});
+      if (!abortCtrl.cancelled) setIsCroppingVideo(false);
+
       const message = err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.";
       setError(message);
       setStatus("error");
@@ -1211,6 +1231,7 @@ export default function DubForm() {
                     <div className="relative">
                       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                       <video
+                        key={videoSrc ?? originalUrl ?? ""}
                         ref={mobileVideoRef}
                         src={videoSrc ?? originalUrl}
                         controls
@@ -1353,6 +1374,7 @@ export default function DubForm() {
               <div className="relative">
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video
+                  key={videoSrc ?? originalUrl ?? ""}
                   ref={videoRef}
                   src={videoSrc ?? originalUrl}
                   controls
