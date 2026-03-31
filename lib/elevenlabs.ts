@@ -18,18 +18,26 @@ function voiceId(): string {
   return id;
 }
 
+export interface WordTimestamp {
+  text: string;
+  start: number;
+  end: number;
+  type: string; // "word" | "spacing" | "audio_event"
+}
+
 /**
  * Transcribe an audio buffer using ElevenLabs Scribe (STT).
- * Returns the transcribed text and detected language code (e.g. "ko", "en").
+ * Returns the transcribed text, detected language code, and per-word timestamps.
  */
 export async function transcribe(
   audioBuffer: Buffer,
   filename: string,
   mimeType: string
-): Promise<{ text: string; languageCode: string | null }> {
+): Promise<{ text: string; languageCode: string | null; words: WordTimestamp[] }> {
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(audioBuffer)], { type: mimeType }), filename);
   form.append("model_id", "scribe_v1");
+  form.append("timestamps_granularity", "word");
 
   const res = await fetch(`${ELEVENLABS_API}/v1/speech-to-text`, {
     method: "POST",
@@ -39,13 +47,22 @@ export async function transcribe(
 
   if (!res.ok) {
     const body = await res.text();
-    if (res.status === 429) throw new Error("ELEVENLABS_QUOTA");
+    if (res.status === 402) throw new Error("ELEVENLABS_QUOTA");
+    if (res.status === 429) throw new Error("ELEVENLABS_RATE_LIMIT");
     if (res.status === 401) throw new Error("ELEVENLABS_AUTH");
     throw new Error(`ElevenLabs STT error ${res.status}: ${body}`);
   }
 
-  const data = (await res.json()) as { text: string; language_code?: string };
-  return { text: data.text, languageCode: data.language_code ?? null };
+  const data = (await res.json()) as {
+    text: string;
+    language_code?: string;
+    words?: Array<{ text: string; start: number; end: number; type: string }>;
+  };
+  return {
+    text: data.text,
+    languageCode: data.language_code ?? null,
+    words: data.words ?? [],
+  };
 }
 
 /**
@@ -69,9 +86,10 @@ export async function textToSpeech(text: string): Promise<Buffer> {
 
   if (!res.ok) {
     const body = await res.text();
-    if (res.status === 429) throw new Error("ELEVENLABS_QUOTA");
+    if (res.status === 402) throw new Error("ELEVENLABS_QUOTA");
+    if (res.status === 429) throw new Error("ELEVENLABS_RATE_LIMIT");
     if (res.status === 401) throw new Error("ELEVENLABS_AUTH");
-    if (res.status === 402) throw new Error("ELEVENLABS_PLAN");
+    if (res.status === 422) throw new Error("ELEVENLABS_PLAN");
     throw new Error(`ElevenLabs TTS error ${res.status}: ${body}`);
   }
 

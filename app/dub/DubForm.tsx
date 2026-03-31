@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { SUPPORTED_LANGUAGES } from "@/lib/languages";
+import { cropVideoFast } from "@/lib/cropVideo";
 
 const CROP_LIMIT_SEC = 60;
 const MAX_FILE_MB = 500;
@@ -25,12 +26,19 @@ function validateFile(file: File): string | null {
 
 type Status = "idle" | "loading" | "done" | "error";
 
+interface DubSegment {
+  start: number;
+  end: number;
+  text: string;
+  translation: string;
+  audio: string; // base64 mp3
+}
+
 interface DubResult {
   transcript: string;
   translation: string;
   detectedLanguage: string | null;
-  audio: string; // base64
-  mimeType: string;
+  segments: DubSegment[];
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -133,6 +141,56 @@ async function extractAndCropAudio(
 
   const rendered = await offCtx.startRendering();
   return encodeWAV(rendered);
+}
+
+/**
+ * 세그먼트별 더빙 오디오를 타임스탬프에 맞춰 조립하여 WAV Blob 반환.
+ *
+ * - 각 세그먼트는 원본 발화 시작 시각(seg.start)에 배치
+ * - TTS 길이 > 발화 슬롯이면 최대 1.8배까지 빠르게 재생하여 슬롯에 맞춤
+ * - totalDuration 으로 정확히 크롭 구간 길이의 오디오 생성
+ */
+async function assembleTimedAudio(
+  segments: DubSegment[],
+  totalDuration: number,
+): Promise<Blob> {
+  const SR = 22050;
+  const offCtx = new OfflineAudioContext(1, Math.ceil(SR * totalDuration), SR);
+
+  const audioCtx = new AudioContext();
+  try {
+    const decoded = await Promise.all(
+      segments.map(async (seg) => {
+        const raw = atob(seg.audio);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        const buffer = await audioCtx.decodeAudioData(bytes.buffer.slice(0));
+        return { seg, buffer };
+      }),
+    );
+
+    for (let i = 0; i < decoded.length; i++) {
+      const { seg, buffer } = decoded[i];
+      const nextStart = i + 1 < segments.length ? segments[i + 1].start : totalDuration;
+      const slot = Math.max(0.05, nextStart - seg.start);
+      // TTS가 슬롯보다 길면 빠르게 재생, 최대 1.8배 (이해 가능한 속도 한계)
+      const speed = Math.min(1.8, Math.max(1.0, buffer.duration / slot));
+
+      const source = offCtx.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = speed;
+      source.connect(offCtx.destination);
+
+      const when = Math.max(0, Math.min(seg.start, totalDuration - 0.001));
+      // duration 파라미터는 출력 타임라인 기준 재생 시간 (playbackRate 이미 반영됨)
+      source.start(when, 0, Math.min(buffer.duration / speed, slot));
+    }
+
+    const rendered = await offCtx.startRendering();
+    return encodeWAV(rendered);
+  } finally {
+    await audioCtx.close();
+  }
 }
 
 /** VTT 타임스탬프 형식: "HH:MM:SS.mmm" */
@@ -306,8 +364,9 @@ function cropVideoBlob(file: File, startSec: number, endSec: number): Promise<Bl
 }
 
 /**
- * video(음소거)와 audio(더빙)를 크롭 구간 [start, end] 내에서 동기화한다.
- * - 영상이 start 이전으로 스크럽되면 audio를 0으로 클램프
+ * video와 audio(더빙)를 크롭 구간 [start, end] 내에서 동기화한다.
+ * - Web Audio API로 원본 오디오 트랙을 무음 처리하여 video.muted = false 유지
+ *   → 네이티브 볼륨 슬라이더가 정상 표시되고, 조절 시 더빙 오디오에 반영
  * - 영상이 end를 넘으면 일시정지 후 start로 되감기
  * cleanup 함수를 반환한다.
  */
@@ -326,10 +385,25 @@ function attachDubSync(
     video.addEventListener("loadedmetadata", onLoaded);
   }
 
-  // 네이티브 컨트롤로 음소거를 해제해도 항상 강제 음소거 유지
-  // (해제하면 원본 오디오 트랙이 들리므로 반드시 막아야 함)
-  video.muted = true;
-  const onVolumeChange = () => { if (!video.muted) video.muted = true; };
+  // Web Audio API로 원본 오디오 트랙을 무음 처리.
+  // createMediaElementSource → GainNode(gain=0) 로 라우팅하되 destination에 연결하지 않아
+  // 실제 출력은 없음. video.muted = false 이므로 네이티브 컨트롤 볼륨 슬라이더 정상 표시.
+  video.muted = false;
+  let audioCtx: AudioContext | null = null;
+  try {
+    audioCtx = new AudioContext();
+    const src = audioCtx.createMediaElementSource(video);
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    src.connect(gain);
+    // destination에 연결하지 않음 → 원본 오디오 무음
+  } catch {
+    // AudioContext 생성 실패(예: 이미 연결된 요소) 시 기존 방식으로 폴백
+    video.muted = true;
+  }
+
+  // 네이티브 볼륨 슬라이더 → 더빙 오디오 볼륨 미러링
+  const onVolumeChange = () => { audio.volume = video.volume; };
 
   // video.currentTime 기준으로 더빙 오디오 오프셋 계산
   const onPlay = () => {
@@ -362,6 +436,7 @@ function attachDubSync(
     video.removeEventListener("pause", onPause);
     video.removeEventListener("seeked", onSeeked);
     video.removeEventListener("timeupdate", onTimeUpdate);
+    audioCtx?.close();
   };
 }
 
@@ -389,7 +464,8 @@ export default function DubForm() {
   const [result, setResult] = useState<DubResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null); // 더빙 패널용 (크롭 blob으로 교체될 수 있음)
+  const [rawOriginalUrl, setRawOriginalUrl] = useState<string | null>(null); // 원본 패널용 (항상 원본 파일 blob)
   const [isDragging, setIsDragging] = useState(false);
 
   // 더빙 video ↔ audio 동기화용 refs
@@ -400,6 +476,7 @@ export default function DubForm() {
 
   const blobUrlRef = useRef<string | null>(null);
   const origUrlRef = useRef<string | null>(null);
+  const rawOrigUrlRef = useRef<string | null>(null);
   const vttUrlRef = useRef<string | null>(null);
   // cropVideoBlob 진행 중 취소 신호 (selectFile 로 새 파일 선택 시 사용)
   const cropAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
@@ -526,12 +603,21 @@ export default function DubForm() {
       origUrlRef.current = null;
       setOriginalUrl(null);
     }
+    if (rawOrigUrlRef.current) {
+      URL.revokeObjectURL(rawOrigUrlRef.current);
+      rawOrigUrlRef.current = null;
+      setRawOriginalUrl(null);
+    }
 
     if (!selected) return;
 
     const origUrl = URL.createObjectURL(selected);
     origUrlRef.current = origUrl;
     setOriginalUrl(origUrl);
+
+    const rawUrl = URL.createObjectURL(selected);
+    rawOrigUrlRef.current = rawUrl;
+    setRawOriginalUrl(rawUrl);
 
     const isVid = selected.type.startsWith("video/");
     const el = document.createElement(isVid ? "video" : "audio") as
@@ -579,13 +665,6 @@ export default function DubForm() {
     const newEnd = Math.max(val, cropStart + 1);
     setCropEnd(newEnd);
     if (newEnd - cropStart > CROP_LIMIT_SEC) setCropStart(newEnd - CROP_LIMIT_SEC);
-  };
-
-  const buildBlobUrl = (base64: string, mimeType: string): string => {
-    const bytes = atob(base64);
-    const arr = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-    return URL.createObjectURL(new Blob([arr], { type: mimeType }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -648,16 +727,11 @@ export default function DubForm() {
     let cropPromise: Promise<Blob | null> = Promise.resolve(null);
 
     if (isVideo && (cropStart > 0 || cropEnd < (fileDuration ?? Infinity))) {
-      const testEl = document.createElement("video");
-      if ("captureStream" in testEl) {
-        setIsCroppingVideo(true);
-        cropPromise = cropVideoBlob(file, snapStart, snapEnd).catch((e) => {
-          if ((e as Error).message !== "CAPTURE_STREAM_UNSUPPORTED") {
-            console.warn("[cropVideo] fallback to fragment:", e);
-          }
-          return null;
-        });
-      }
+      setIsCroppingVideo(true);
+      cropPromise = cropVideoFast(file, snapStart, snapEnd).catch((e) => {
+        console.warn("[cropVideo] FFmpeg 실패, MediaRecorder fallback:", e);
+        return cropVideoBlob(file, snapStart, snapEnd).catch(() => null);
+      });
     }
 
     setStep(2);
@@ -674,14 +748,15 @@ export default function DubForm() {
         throw new Error(data.error ?? `서버 오류 (${res.status}). 잠시 후 다시 시도해 주세요.`);
       }
 
-      const url = buildBlobUrl(data.audio, data.mimeType);
+      // 세그먼트별 TTS를 타임스탬프에 맞게 조립 → 크롭 구간 길이와 동일한 WAV 생성
+      const assembledBlob = await assembleTimedAudio(data.segments, snapEnd - snapStart);
+      const url = URL.createObjectURL(assembledBlob);
       blobUrlRef.current = url;
       setAudioUrl(url);
       setResult(data);
-      setStatus("done");
       setStep(-1);
 
-      // API가 먼저 끝난 경우 크롭 완료까지 대기
+      // 크롭 완료 후 결과 표시 (플레이어는 실제 크롭 blob 준비 후 렌더링)
       const croppedBlob = await cropPromise;
       if (!abortCtrl.cancelled) {
         if (croppedBlob) {
@@ -692,6 +767,7 @@ export default function DubForm() {
           setVideoCropped(true);
         }
         setIsCroppingVideo(false);
+        setStatus("done");
       }
     } catch (err) {
       // API 에러 시 크롭 프로미스의 미처리 거부만 억제 (blob은 GC에 맡김)
@@ -709,7 +785,7 @@ export default function DubForm() {
     if (!audioUrl) return;
     const a = document.createElement("a");
     a.href = audioUrl;
-    a.download = `dubbed_${targetLanguage.toLowerCase()}.mp3`;
+    a.download = `dubbed_${targetLanguage.toLowerCase()}.wav`;
     a.click();
   };
 
@@ -1164,8 +1240,13 @@ export default function DubForm() {
                     <p className="text-sm font-semibold text-[#1a1917]">
                       {step === 0 && "파일 준비 중…"}
                       {step === 1 && (isVideoFile ? "영상에서 오디오 추출 중…" : "오디오 구간 크롭 중…")}
+                      {step === -1 && "영상 크롭 중…"}
                     </p>
-                    <p className="text-xs text-[#a8a29e] mt-0.5">잠깐만요, 곧 서버에 전송합니다</p>
+                    <p className="text-xs text-[#a8a29e] mt-0.5">
+                      {step === -1
+                        ? "더빙 음성 생성 완료 · 영상 크롭 처리 중 (최초 실행 시 약 10~30초 소요)"
+                        : "잠깐만요, 곧 서버에 전송합니다"}
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -1282,10 +1363,10 @@ export default function DubForm() {
 
               {isVideoFile ? (
                 <div className="rounded-xl overflow-hidden bg-black">
-                  {playbackMode === "original" && originalUrl && (
+                  {playbackMode === "original" && rawOriginalUrl && (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
                     <video
-                      src={videoSrc ?? originalUrl}
+                      src={rawOriginalUrl}
                       controls
                       playsInline
                       className="w-full max-h-64 object-contain"
@@ -1320,9 +1401,9 @@ export default function DubForm() {
                 </div>
               ) : (
                 <div>
-                  {playbackMode === "original" && originalUrl && (
+                  {playbackMode === "original" && rawOriginalUrl && (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <audio controls src={originalUrl ?? undefined} className="w-full" />
+                    <audio controls src={rawOriginalUrl} className="w-full" />
                   )}
                   {playbackMode === "dubbed" && audioUrl && (
                     <div>
@@ -1372,11 +1453,11 @@ export default function DubForm() {
             )}
           </div>
 
-          {videoSrc || originalUrl ? (
+          {rawOriginalUrl ? (
             isVideoFile ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
-                src={videoSrc ?? originalUrl!}
+                src={rawOriginalUrl}
                 controls
                 playsInline
                 className="w-full aspect-video object-contain bg-black"
@@ -1384,7 +1465,7 @@ export default function DubForm() {
             ) : (
               <div className="p-4">
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                <audio controls src={originalUrl ?? undefined} className="w-full" />
+                <audio controls src={rawOriginalUrl} className="w-full" />
               </div>
             )
           ) : (
