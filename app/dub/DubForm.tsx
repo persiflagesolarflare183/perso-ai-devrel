@@ -155,7 +155,7 @@ async function assembleTimedAudio(
   totalDuration: number,
 ): Promise<Blob> {
   const SR = 22050;
-  const offCtx = new OfflineAudioContext(1, Math.ceil(SR * totalDuration), SR);
+  const offCtx = new OfflineAudioContext(2, Math.ceil(SR * totalDuration), SR);
 
   const audioCtx = new AudioContext();
   try {
@@ -250,6 +250,47 @@ function buildSubtitleChunks(text: string): string[] {
     chunks.push(sentences.slice(i, i + 2).join(" "));
   }
   return chunks;
+}
+
+/**
+ * 캔버스에 자막 텍스트를 하단 중앙에 그린다. (다운로드 영상 burn-in용)
+ */
+function drawSubtitle(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  width: number,
+  height: number,
+) {
+  const fontSize = Math.max(18, Math.floor(width / 36));
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+
+  const lines = text.split(/\n/);
+  const lineHeight = fontSize * 1.35;
+  const pad = fontSize * 0.45;
+  const totalTextH = lines.length * lineHeight;
+  const bgY = height - pad * 2;
+
+  const maxW = lines.reduce(
+    (m, l) => Math.max(m, ctx.measureText(l).width),
+    0,
+  );
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.beginPath();
+  ctx.roundRect(
+    (width - maxW) / 2 - pad,
+    bgY - totalTextH - pad,
+    maxW + pad * 2,
+    totalTextH + pad * 1.5,
+    8,
+  );
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  lines.forEach((line, i) => {
+    ctx.fillText(line, width / 2, bgY - (lines.length - 1 - i) * lineHeight);
+  });
 }
 
 /**
@@ -364,9 +405,7 @@ function cropVideoBlob(file: File, startSec: number, endSec: number): Promise<Bl
 }
 
 /**
- * video와 audio(더빙)를 크롭 구간 [start, end] 내에서 동기화한다.
- * - Web Audio API로 원본 오디오 트랙을 무음 처리하여 video.muted = false 유지
- *   → 네이티브 볼륨 슬라이더가 정상 표시되고, 조절 시 더빙 오디오에 반영
+ * video(음소거)와 audio(더빙)를 크롭 구간 [start, end] 내에서 동기화한다.
  * - 영상이 end를 넘으면 일시정지 후 start로 되감기
  * cleanup 함수를 반환한다.
  */
@@ -385,25 +424,9 @@ function attachDubSync(
     video.addEventListener("loadedmetadata", onLoaded);
   }
 
-  // Web Audio API로 원본 오디오 트랙을 무음 처리.
-  // createMediaElementSource → GainNode(gain=0) 로 라우팅하되 destination에 연결하지 않아
-  // 실제 출력은 없음. video.muted = false 이므로 네이티브 컨트롤 볼륨 슬라이더 정상 표시.
-  video.muted = false;
-  let audioCtx: AudioContext | null = null;
-  try {
-    audioCtx = new AudioContext();
-    const src = audioCtx.createMediaElementSource(video);
-    const gain = audioCtx.createGain();
-    gain.gain.value = 0;
-    src.connect(gain);
-    // destination에 연결하지 않음 → 원본 오디오 무음
-  } catch {
-    // AudioContext 생성 실패(예: 이미 연결된 요소) 시 기존 방식으로 폴백
-    video.muted = true;
-  }
-
-  // 네이티브 볼륨 슬라이더 → 더빙 오디오 볼륨 미러링
-  const onVolumeChange = () => { audio.volume = video.volume; };
+  // 원본 오디오 트랙이 들리지 않도록 항상 음소거 유지
+  video.muted = true;
+  const onVolumeChange = () => { if (!video.muted) video.muted = true; };
 
   // video.currentTime 기준으로 더빙 오디오 오프셋 계산
   const onPlay = () => {
@@ -436,7 +459,6 @@ function attachDubSync(
     video.removeEventListener("pause", onPause);
     video.removeEventListener("seeked", onSeeked);
     video.removeEventListener("timeupdate", onTimeUpdate);
-    audioCtx?.close();
   };
 }
 
@@ -790,16 +812,14 @@ export default function DubForm() {
   };
 
   /**
-   * 영상 다운로드: 원본 영상(음소거) + 더빙 오디오를 MediaRecorder로 실시간 합성.
-   * captureStream 미지원 브라우저(Firefox 일부, iOS Safari)에서는 MP3 폴백.
+   * 영상 다운로드: 캔버스에 영상 프레임 + 자막을 그려 WebM으로 녹화.
+   * 자막 burn-in 포함. captureStream 미지원 시 MP3 폴백.
    */
   const handleVideoDownload = async () => {
     if (!originalUrl || !audioUrl) return;
 
-    // video 또는 canvas captureStream 중 하나라도 지원해야 영상 다운로드 가능
-    const testVideo = document.createElement("video");
     const testCanvas = document.createElement("canvas");
-    if (!("captureStream" in testVideo) && !("captureStream" in testCanvas)) {
+    if (!("captureStream" in testCanvas)) {
       setVideoDownloadNotice(
         "이 브라우저는 영상 합성을 지원하지 않아 더빙 MP3만 다운로드됩니다.\n" +
         "영상 파일로 받으려면 Chrome 또는 Edge를 사용해 주세요."
@@ -810,6 +830,7 @@ export default function DubForm() {
     }
 
     setIsRecording(true);
+    const audioCtx = new AudioContext();
     try {
       const video = document.createElement("video");
       video.src = originalUrl;
@@ -819,46 +840,76 @@ export default function DubForm() {
       const audio = document.createElement("audio");
       audio.src = audioUrl;
 
-      // 메타데이터 로드 대기
       await Promise.all([
         new Promise<void>((r) => { video.oncanplay = () => r(); video.load(); }),
         new Promise<void>((r) => { audio.oncanplay = () => r(); audio.load(); }),
       ]);
 
-      // videoCropped=true 이면 originalUrl 이 이미 크롭된 영상(0초 시작)이므로 0으로 seek
       video.currentTime = videoCropped ? 0 : cropStart;
       audio.currentTime = 0;
 
-      const captured = getCaptureStream(video);
-      if (!captured) throw new Error("captureStream unavailable");
+      // 캔버스: 영상 프레임 + 자막 burn-in
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext("2d")!;
 
-      const audioCtx = new AudioContext();
-      const audioSrc = audioCtx.createMediaElementSource(audio);
-      const audioDest = audioCtx.createMediaStreamDestination();
-      audioSrc.connect(audioDest);
+      const subtitleChunks = result ? buildSubtitleChunks(result.translation) : [];
+      const startPos = videoCropped ? 0 : cropStart;
+      const dur = cropEnd - cropStart;
+
+      let rafId = 0;
+      const drawFrame = () => {
+        if (video.readyState >= 2) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          if (showSubtitles && subtitleChunks.length > 0) {
+            const elapsed = video.currentTime - startPos;
+            const p = Math.max(0, Math.min(1, elapsed / Math.max(1, dur)));
+            const idx = Math.min(Math.floor(p * subtitleChunks.length), subtitleChunks.length - 1);
+            const subtitle = subtitleChunks[idx];
+            if (subtitle) drawSubtitle(ctx, subtitle, canvas.width, canvas.height);
+          }
+        }
+        rafId = requestAnimationFrame(drawFrame);
+      };
+      rafId = requestAnimationFrame(drawFrame);
+
+      const videoStream = (canvas as any).captureStream(30) as MediaStream;
+
+      // 오디오 트랙: captureStream() 직접 추출 우선, 미지원 시 Web Audio 폴백
+      let audioTracks: MediaStreamTrack[];
+      if ("captureStream" in audio) {
+        audioTracks = (audio as any).captureStream().getAudioTracks();
+      } else {
+        const audioSrc = audioCtx.createMediaElementSource(audio);
+        const audioDest = audioCtx.createMediaStreamDestination();
+        audioSrc.connect(audioDest);
+        audioTracks = audioDest.stream.getAudioTracks();
+      }
 
       const combined = new MediaStream([
-        ...captured.stream.getVideoTracks(),
-        ...audioDest.stream.getAudioTracks(),
+        ...videoStream.getVideoTracks(),
+        ...audioTracks,
       ]);
 
       const mimeType =
-        MediaRecorder.isTypeSupported("video/mp4")
-          ? "video/mp4"
+        MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+          ? "video/webm;codecs=vp9,opus"
+          : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+          ? "video/webm;codecs=vp8,opus"
           : "video/webm";
 
       const recorder = new MediaRecorder(combined, { mimeType });
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = async () => {
-        captured.cleanup(); // canvas RAF 루프 중단
+        cancelAnimationFrame(rafId);
         await audioCtx.close();
-        const ext = mimeType === "video/mp4" ? "mp4" : "webm";
         const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `dubbed_${targetLanguage.toLowerCase()}.${ext}`;
+        a.download = `dubbed_${targetLanguage.toLowerCase()}.webm`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
         setIsRecording(false);
@@ -867,19 +918,19 @@ export default function DubForm() {
       recorder.start(250);
       await Promise.all([video.play(), audio.play()]);
 
-      // 더빙 오디오 종료 시 녹화 중단 (더빙 = 크롭 구간 길이)
       audio.onended = () => {
         video.pause();
         if (recorder.state === "recording") recorder.stop();
       };
-      // 안전 타임아웃
       setTimeout(() => {
         if (recorder.state === "recording") { video.pause(); audio.pause(); recorder.stop(); }
       }, (cropEnd - cropStart + 2) * 1000);
     } catch (e) {
       console.error("[video download]", e);
+      cancelAnimationFrame(0);
+      await audioCtx.close();
       setIsRecording(false);
-      handleDownload(); // 실패 시 MP3 폴백
+      handleDownload();
     }
   };
 
